@@ -18,10 +18,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 
 /**
  * Service for batch indexing documents into OpenSearch.
@@ -54,7 +52,7 @@ public class BatchIndexerService {
 
     @PostConstruct
     public void initialize() throws Exception {
-        index.createAlfrescoIndex();
+        index.createAlfrescoIndexes();
     }
 
     /**

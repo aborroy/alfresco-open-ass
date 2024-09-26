@@ -21,14 +21,24 @@ import java.io.IOException;
 
 /**
  * Component for managing OpenSearch indices.
+ * This class provides methods for creating and managing Alfresco indexes in OpenSearch.
  */
 @Component
 public class Index {
 
-    static final Logger LOG = LoggerFactory.getLogger(Index.class);
+    private static final Logger LOG = LoggerFactory.getLogger(Index.class);
+
+    @Value("${opensearch.index.create}")
+    private Boolean indexCreation;
 
     @Value("${opensearch.index.name}")
     private String indexName;
+
+    @Value("${opensearch.index.control.create}")
+    private Boolean indexControlCreation;
+
+    @Value("${opensearch.index.control.name}")
+    private String indexControlName;
 
     @Autowired
     private OpenSearchClientFactory openSearchClientFactory;
@@ -38,7 +48,7 @@ public class Index {
      *
      * @return RestClient instance
      */
-    private RestClient restClient() {
+    private RestClient getRestClient() {
         return openSearchClientFactory.getRestClient();
     }
 
@@ -47,19 +57,22 @@ public class Index {
      *
      * @return OpenSearchClient instance
      */
-    private OpenSearchClient openSearchClient() {
+    private OpenSearchClient getOpenSearchClient() {
         return openSearchClientFactory.getOpenSearchClient();
     }
 
     /**
-     * Create index to control alfresco indexing information
+     * Creates the necessary Alfresco indexes in OpenSearch if they do not already exist.
+     *
+     * @throws Exception If an error occurs during index creation.
      */
-    public void createAlfrescoIndex() throws Exception {
+    public void createAlfrescoIndexes() throws Exception {
+        OpenSearchClient openSearchClient = getOpenSearchClient();
+        RestClient restClient = getRestClient();
 
-        if (!openSearchClient().indices().exists(new ExistsRequest.Builder().index("alfresco-control").build()).value()) {
-
-            Request request = new Request("PUT", "/alfresco-control");
-            String jsonString = """
+        // Create control index if enabled and does not exist
+        if (indexControlCreation && !openSearchClient.indices().exists(new ExistsRequest.Builder().index(indexControlName).build()).value()) {
+            String controlIndexMapping = """
                     {
                       "mappings": {
                         "properties": {
@@ -70,17 +83,13 @@ public class Index {
                       }
                     }
                     """;
-
-            request.setEntity(new StringEntity(jsonString, ContentType.APPLICATION_JSON));
-            restClient().performRequest(request);
-
-            LOG.info("Internal index alfresco-control for alfresco indexing information has been created");
+            createIndex(restClient, indexControlName, controlIndexMapping);
+            LOG.info("Internal index '{}' for alfresco indexing information has been created", indexControlName);
         }
 
-        if (!openSearchClient().indices().exists(new ExistsRequest.Builder().index(indexName).build()).value()) {
-
-            Request request = new Request("PUT", "/" + indexName);
-            String jsonString = """
+        // Create main Alfresco index if enabled and does not exist
+        if (indexCreation && !openSearchClient.indices().exists(new ExistsRequest.Builder().index(indexName).build()).value()) {
+            String alfrescoIndexMapping = """
                     {
                         "mappings": {
                              "properties": {
@@ -102,60 +111,62 @@ public class Index {
                              }
                            }
                          }
-                    }
                     """;
-
-            request.setEntity(new StringEntity(jsonString, ContentType.APPLICATION_JSON));
-            restClient().performRequest(request);
-
-            LOG.info("Internal index " + indexName + " for alfresco indexing information has been created");
+            createIndex(restClient, indexName, alfrescoIndexMapping);
+            LOG.info("Internal index '{}' for alfresco indexing information has been created", indexName);
         }
 
     }
 
     /**
-     * Updates the last synchronization time in the Alfresco index.
+     * Creates an index with the specified name and mapping in OpenSearch.
      *
-     * @param lastTransactionId The last transactionId to be updated in the Alfresco index.
-     * @throws Exception If an error occurs during the update process.
+     * @param restClient   The RestClient instance to use.
+     * @param indexName    The name of the index to create.
+     * @param mappingJson  The JSON string for the index mapping.
+     * @throws IOException If an error occurs during index creation.
      */
-    public void updateAlfrescoIndex(Long lastTransactionId) throws Exception {
+    private void createIndex(RestClient restClient, String indexName, String mappingJson) throws IOException {
+        Request request = new Request("PUT", "/" + indexName);
+        request.setEntity(new StringEntity(mappingJson, ContentType.APPLICATION_JSON));
+        restClient.performRequest(request);
+    }
+
+    /**
+     * Updates the last transactionId in the Alfresco control index.
+     *
+     * @param lastTransactionId The last transactionId to be updated.
+     * @throws IOException If an error occurs during the update process.
+     */
+    public void updateAlfrescoIndex(Long lastTransactionId) throws IOException {
         Request request = new Request("PUT", "/alfresco-control/_doc/1");
-        String jsonString = "{ \"lastTransactionId\": %d }".formatted(lastTransactionId);
+        String jsonString = String.format("{ \"lastTransactionId\": %d }", lastTransactionId);
         request.setEntity(new StringEntity(jsonString, ContentType.APPLICATION_JSON));
-        restClient().performRequest(request);
+        getRestClient().performRequest(request);
     }
 
     /**
-     * Retrieves the value of the last transaction Id synchronized from the Alfresco index.
+     * Retrieves the last transactionId synchronized from the Alfresco control index.
      *
-     * @return The value of the last transaction Id synchronized.
-     * @throws Exception If an error occurs during the retrieval process.
+     * @return The last synchronized transactionId, or -1 if not found.
+     * @throws IOException If an error occurs during retrieval.
      */
-    public Long getAlfrescoIndexField() throws Exception {
+    public Long getAlfrescoIndexField() throws IOException {
         Request request = new Request("GET", "/alfresco-control/_doc/1");
-        try {
-            Response response = restClient().performRequest(request);
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
-            return jsonResponse.get("_source").get("lastTransactionId").asLong();
-        } catch (ResponseException e) {
-            if (e.getResponse().getStatusLine().getStatusCode() == 404) {
-                return -1L;
-            } else {
-                throw e;
-            }
-        }
-
+        Response response = getRestClient().performRequest(request);
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
+        return jsonResponse.get("_source").get("lastTransactionId").asLong();
     }
 
     /**
-     * Checks if the index exists in the OpenSearch cluster.
+     * Checks if the specified index exists in the OpenSearch cluster.
      *
-     * @return true if the index exists, false otherwise
-     * @throws IOException if an I/O error occurs
+     * @return true if the index exists, false otherwise.
+     * @throws IOException If an error occurs during the existence check.
      */
     public boolean existIndex() throws IOException {
-        return openSearchClient().indices().exists(new ExistsRequest.Builder().index(indexName).build()).value();
+        return getOpenSearchClient().indices().exists(new ExistsRequest.Builder().index(indexName).build()).value();
     }
+
 }
