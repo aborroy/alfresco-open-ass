@@ -7,7 +7,6 @@ import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
-import org.opensearch.client.ResponseException;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
@@ -138,8 +137,8 @@ public class Index {
      * @param lastTransactionId The last transactionId to be updated.
      * @throws IOException If an error occurs during the update process.
      */
-    public void updateAlfrescoIndex(Long lastTransactionId) throws IOException {
-        Request request = new Request("PUT", "/alfresco-control/_doc/1");
+    public void updateAlfrescoControlIndexStatus(Long lastTransactionId) throws IOException {
+        Request request = new Request("PUT", "/" + indexControlName + "/_doc/1");
         String jsonString = String.format("{ \"lastTransactionId\": %d }", lastTransactionId);
         request.setEntity(new StringEntity(jsonString, ContentType.APPLICATION_JSON));
         getRestClient().performRequest(request);
@@ -151,8 +150,8 @@ public class Index {
      * @return The last synchronized transactionId, or -1 if not found.
      * @throws IOException If an error occurs during retrieval.
      */
-    public Long getAlfrescoIndexField() throws IOException {
-        Request request = new Request("GET", "/alfresco-control/_doc/1");
+    public Long getAlfrescoControlIndexStatus() throws IOException {
+        Request request = new Request("GET", "/" + indexControlName + "/_doc/1");
         Response response = getRestClient().performRequest(request);
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());

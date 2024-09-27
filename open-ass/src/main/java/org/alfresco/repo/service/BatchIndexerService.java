@@ -61,7 +61,7 @@ public class BatchIndexerService {
     @Scheduled(cron = "${batch.indexer.cron}")
     public void index() throws Exception {
 
-        long lastTransactionId = index.getAlfrescoIndexField() + 1;
+        long lastTransactionId = index.getAlfrescoControlIndexStatus() + 1;
 
         JsonNode rootNode = retrieveTransactions(lastTransactionId, maxResults);
 
@@ -80,14 +80,14 @@ public class BatchIndexerService {
             LOG.info("Indexing content for transactions between {} and {}", minTxnId, maxTxnId);
             processTransactions(minTxnId, maxTxnId);
 
-            index.updateAlfrescoIndex(maxTxnId);
+            index.updateAlfrescoControlIndexStatus(maxTxnId);
         } else {
             LOG.info(
                     """
                     All transactions have been indexed:
                      - maximum Transaction Id in Alfresco is {}
                      - maximum Transaction Id in OpenSearch is {}
-                    """, maxTxnIdRepository, index.getAlfrescoIndexField());
+                    """, maxTxnIdRepository, index.getAlfrescoControlIndexStatus());
         }
     }
 
