@@ -74,59 +74,6 @@ public class Indexer {
         }
     }
 
-    /**
-     * Verifies indexing process by using the model is working.
-     */
-    public void verifyIndexStatus() throws Exception {
-        int retryCount = 0;
-        boolean success = false;
-
-        while (retryCount < 3 && !success) {
-            try {
-                Request request = new Request("POST", "/" + indexName + "/_doc");
-                String jsonString = """
-                        {
-                           "id": "%s",
-                           "dbid": %s,
-                           "contentId": %s,
-                           "name": "%s",
-                           "text": "%s"
-                        }
-                        """;
-                String formattedJson = String.format(jsonString, "1", 1L, "1", "verify", "verify");
-                request.setEntity(new StringEntity(formattedJson, ContentType.APPLICATION_JSON));
-                restClient().performRequest(request);
-
-                request = new Request("POST", "/" + indexName + "/_delete_by_query");
-                jsonString = """
-                        {
-                          "query": {
-                            "match": {
-                              "id": "%s"
-                            }
-                          }
-                        }
-                        """;
-                request.setEntity(new StringEntity(String.format(jsonString, "1"), ContentType.APPLICATION_JSON));
-                restClient().performRequest(request);
-
-                success = true; // Mark the operation as successful
-            } catch (ResponseException e) {
-                if (e.getResponse().getStatusLine().getStatusCode() == 403) {
-                    // If Forbidden status, retry
-                    retryCount++;
-                    TimeUnit.SECONDS.sleep(1);
-                } else {
-                    throw e; // Re-throw if it's not the expected exception
-                }
-            }
-        }
-
-        if (!success) {
-            throw new Exception("Failed to verify index status after 3 attempts");
-        }
-    }
-
     public String getContentId(String uuid) throws Exception {
 
         String contentId = "";

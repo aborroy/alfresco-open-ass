@@ -10,16 +10,21 @@ import org.opensearch.client.transport.OpenSearchTransport;
 import org.opensearch.client.transport.rest_client.RestClientTransport;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
 import java.io.FileInputStream;
 import java.security.KeyStore;
+import java.util.Arrays;
 
 /**
  * Factory class for creating and managing OpenSearch clients.
  */
 @Component
 public class OpenSearchClientFactory {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(OpenSearchClientFactory.class);
 
     @Value("${opensearch.host}")
     private String opensearchHost;
@@ -48,8 +53,8 @@ public class OpenSearchClientFactory {
     @Value("${opensearch.truststore.type}")
     private String trustStoreType;
 
-    private OpenSearchClient openSearchClient;
-    private RestClient restClient;
+    private volatile OpenSearchClient openSearchClient;
+    private volatile RestClient restClient;
 
     /**
      * Initializes the OpenSearch client and REST client.
@@ -59,44 +64,65 @@ public class OpenSearchClientFactory {
             return;
         }
 
-        if (opensearchProtocol.equals("http")) {
+        try {
+            HttpHost host = new HttpHost(opensearchHost, opensearchPort, opensearchProtocol);
 
-            RestClientBuilder builder = RestClient.builder(new HttpHost(opensearchHost, opensearchPort, opensearchProtocol));
-            restClient = builder.build();
-
-            OpenSearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
-            openSearchClient = new OpenSearchClient(transport);
-
-        } else if (opensearchProtocol.equals("https")) {
-
-            try {
-
-                KeyStore clientKeyStore = KeyStore.getInstance(clientKeystoreType);
-                clientKeyStore.load(new FileInputStream(clientKeystorePath), clientKeystorePassword.toCharArray());
-
-                KeyStore trustStore = KeyStore.getInstance(trustStoreType);
-                trustStore.load(new FileInputStream(trustStorePath), trustStorePassword.toCharArray());
-
-                SSLContext sslContext = SSLContextBuilder.create()
-                        .loadKeyMaterial(clientKeyStore, clientKeystorePassword.toCharArray())
-                        .loadTrustMaterial(trustStore, null)
-                        .build();
-
-                RestClientBuilder builder = RestClient.builder(new HttpHost(opensearchHost, opensearchPort, opensearchProtocol))
-                        .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder.setSSLContext(sslContext));
-
-                restClient = builder.build();
-
-                OpenSearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
-                openSearchClient = new OpenSearchClient(transport);
-
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to initialize OpenSearch client", e);
+            if (opensearchProtocol.equalsIgnoreCase("http")) {
+                initializeHttpClient(host);
+            } else if (opensearchProtocol.equalsIgnoreCase("https")) {
+                initializeHttpsClient(host);
+            } else {
+                throw new IllegalArgumentException("Invalid OpenSearch protocol: " + opensearchProtocol);
             }
+        } catch (Exception e) {
+            LOGGER.error("Failed to initialize OpenSearch client", e);
+            throw new RuntimeException("Failed to initialize OpenSearch client", e);
+        }
+    }
 
-        } else {
-            throw new RuntimeException("Communication protocol with OpenSearch " + opensearchProtocol +
-                    ", specified in opensearch.protocol is not valid. Expecting http or https.");
+    /**
+     * Initializes HTTP OpenSearch client.
+     */
+    private void initializeHttpClient(HttpHost hosts) {
+        RestClientBuilder builder = RestClient.builder(hosts);
+        restClient = builder.build();
+        OpenSearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+        openSearchClient = new OpenSearchClient(transport);
+        LOGGER.info("Initialized HTTP OpenSearch client for hosts: {}", (Object) hosts);
+    }
+
+    /**
+     * Initializes HTTPS OpenSearch client with SSL context.
+     */
+    private void initializeHttpsClient(HttpHost hosts) throws Exception {
+        SSLContext sslContext = createSSLContext();
+
+        RestClientBuilder builder = RestClient.builder(hosts)
+                .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder.setSSLContext(sslContext));
+
+        restClient = builder.build();
+        OpenSearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+        openSearchClient = new OpenSearchClient(transport);
+        LOGGER.info("Initialized HTTPS OpenSearch client for hosts: {}", (Object) hosts);
+    }
+
+    /**
+     * Creates SSL context for HTTPS connections.
+     */
+    private SSLContext createSSLContext() throws Exception {
+        try (FileInputStream keyStoreStream = new FileInputStream(clientKeystorePath);
+             FileInputStream trustStoreStream = new FileInputStream(trustStorePath)) {
+
+            KeyStore clientKeyStore = KeyStore.getInstance(clientKeystoreType);
+            clientKeyStore.load(keyStoreStream, clientKeystorePassword.toCharArray());
+
+            KeyStore trustStore = KeyStore.getInstance(trustStoreType);
+            trustStore.load(trustStoreStream, trustStorePassword.toCharArray());
+
+            return SSLContextBuilder.create()
+                    .loadKeyMaterial(clientKeyStore, clientKeystorePassword.toCharArray())
+                    .loadTrustMaterial(trustStore, null)
+                    .build();
         }
     }
 
@@ -122,5 +148,18 @@ public class OpenSearchClientFactory {
             init();
         }
         return restClient;
+    }
+
+    /**
+     * Closes the RestClient when it's no longer needed.
+     */
+    public void close() {
+        if (restClient != null) {
+            try {
+                restClient.close();
+            } catch (Exception e) {
+                LOGGER.error("Error closing RestClient", e);
+            }
+        }
     }
 }

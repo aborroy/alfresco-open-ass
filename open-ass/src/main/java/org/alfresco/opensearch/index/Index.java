@@ -3,10 +3,12 @@ package org.alfresco.opensearch.index;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.alfresco.opensearch.client.OpenSearchClientFactory;
+import org.apache.http.HttpStatus;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
+import org.opensearch.client.ResponseException;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.opensearch.indices.ExistsRequest;
@@ -147,16 +149,26 @@ public class Index {
     /**
      * Retrieves the last transactionId synchronized from the Alfresco control index.
      *
-     * @return The last synchronized transactionId, or -1 if not found.
+     * @return The last synchronized transactionId, 0 if not found (404), or -1 for other errors.
      * @throws IOException If an error occurs during retrieval.
      */
     public Long getAlfrescoControlIndexStatus() throws IOException {
         Request request = new Request("GET", "/" + indexControlName + "/_doc/1");
-        Response response = getRestClient().performRequest(request);
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
-        return jsonResponse.get("_source").get("lastTransactionId").asLong();
+        try {
+            Response response = getRestClient().performRequest(request);
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
+            return jsonResponse.get("_source").get("lastTransactionId").asLong();
+        } catch (ResponseException e) {
+            int statusCode = e.getResponse().getStatusLine().getStatusCode();
+            if (statusCode == HttpStatus.SC_NOT_FOUND) {
+                return 0L;
+            } else {
+                throw new IOException("Unexpected response status: " + statusCode, e);
+            }
+        }
     }
+
 
     /**
      * Checks if the specified index exists in the OpenSearch cluster.
