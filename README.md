@@ -2,7 +2,7 @@
 
 OpenSearch support for Alfresco Community Search Services
 
-![Proposed Architecture](docs/architecture.drawio)
+![Proposed Architecture](docs/architecture.svg)
 ![](docs/coverage.png)
 
 ## Contributors
