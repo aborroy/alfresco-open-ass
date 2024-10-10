@@ -25,4 +25,13 @@ public class TransactionNodeContainer {
     public void setNodes(List<TransactionNode> nodes) {
         this.nodes = nodes;
     }
+
+
+    @Override
+    public String toString() {
+        return "TransactionNodeContainer{" +
+                "nodes=" + nodes +
+                '}';
+    }
+
 }

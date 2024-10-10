@@ -1,13 +1,24 @@
 package org.alfresco.repo.service.beans;
 
+import org.alfresco.repo.service.ModelMappingService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.alfresco.opensearch.index.OpenSearchRequestBuilder.extractUuid;
 
 /**
  * Represents a node in the Alfresco repository.
  */
 public class Node {
+
+    private static final Logger LOG = LoggerFactory.getLogger(Node.class);
+
     private long id; // Unique identifier for the node
     private String tenantDomain; // Domain of the tenant to which the node belongs
     private String nodeRef; // Node reference identifier
@@ -16,8 +27,13 @@ public class Node {
     private int txnId; // Transaction identifier
     private Map<String, Serializable> properties; // Properties associated with the node
     private List<String> aspects; // Aspects associated with the node
-    private List<String> paths; // Paths to the node
-    private List<String> namePaths; // Paths to the node by name
+    private List<Path> paths; // Paths to the node
+    private List<NamePath> namePaths; // Paths to the node by name
+    private List<String> ancestors;
+    private List<String> parentAssocs;
+    private Long parentAssocsCrc;
+    private String owner;
+    private List<String> readers;
 
     // Getters and setters
 
@@ -144,7 +160,32 @@ public class Node {
      * @param properties The node properties.
      */
     public void setProperties(Map<String, Serializable> properties) {
-        this.properties = properties;
+        Map<String, Serializable> prefixedProperties = new HashMap<>();
+
+        for (Map.Entry<String, Serializable> entry : properties.entrySet()) {
+            String key = entry.getKey();
+            int lastIndex = key.lastIndexOf("}");
+
+            if (lastIndex < 0) {
+                throw new IllegalArgumentException("Key must contain a closing brace '}'");
+            }
+
+            String prefix = ModelMappingService.URL_TO_PREFIX.get(key.substring(0, lastIndex + 1));
+            if (prefix == null) {
+                LOG.error("Prefix missing for key '{}' in node '{}'. The Custom Content Model might not be deployed in the Repository. " +
+                        "Please verify that the model is correctly registered and deployed.", key, nodeRef);
+                prefix = key.substring(0, lastIndex + 1);
+            }
+
+            String prefixedKey = prefix + ":" + key.substring(lastIndex + 1);
+            prefixedProperties.put(prefixedKey, entry.getValue());
+        }
+
+        this.properties = prefixedProperties;
+    }
+
+    public Map<String, Serializable> getPropertiesQName() {
+        return properties;
     }
 
     /**
@@ -170,7 +211,7 @@ public class Node {
      *
      * @return The paths to the node.
      */
-    public List<String> getPaths() {
+    public List<Path> getPaths() {
         return paths;
     }
 
@@ -179,7 +220,7 @@ public class Node {
      *
      * @param paths The paths to the node.
      */
-    public void setPaths(List<String> paths) {
+    public void setPaths(List<Path> paths) {
         this.paths = paths;
     }
 
@@ -188,7 +229,7 @@ public class Node {
      *
      * @return The paths to the node by name.
      */
-    public List<String> getNamePaths() {
+    public List<NamePath> getNamePaths() {
         return namePaths;
     }
 
@@ -197,7 +238,66 @@ public class Node {
      *
      * @param namePaths The paths to the node by name.
      */
-    public void setNamePaths(List<String> namePaths) {
+    public void setNamePaths(List<NamePath> namePaths) {
         this.namePaths = namePaths;
     }
+
+    public List<String> getAncestors() { return ancestors; }
+    public void setAncestors(List<String> ancestors) {
+        this.ancestors = new ArrayList<>();
+        ancestors.forEach(ancestor -> {
+            this.ancestors.add(extractUuid(ancestor));
+        });
+    }
+
+    public List<String> getParentAssocs() { return parentAssocs; }
+    public void setParentAssocs(List<String> parentAssocs) {
+        this.parentAssocs = parentAssocs;
+    }
+
+    public Long getParentAssocsCrc() {
+        return parentAssocsCrc;
+    }
+
+    public void setParentAssocsCrc(Long parentAssocsCrc) {
+        this.parentAssocsCrc = parentAssocsCrc;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
+    }
+
+    public List<String> getReaders() {
+        return readers;
+    }
+
+    public void setReaders(List<String> readers) {
+        this.readers = readers;
+    }
+
+    @Override
+    public String toString() {
+        return "Node{" +
+                "id=" + id +
+                ", tenantDomain='" + tenantDomain + '\'' +
+                ", nodeRef='" + nodeRef + '\'' +
+                ", type='" + type + '\'' +
+                ", aclId=" + aclId +
+                ", txnId=" + txnId +
+                ", properties=" + properties +
+                ", aspects=" + aspects +
+                ", paths=" + paths +
+                ", namePaths=" + namePaths +
+                ", ancestors=" + ancestors +
+                ", parentAssocs=" + parentAssocs +
+                ", parentAssocsCrc=" + parentAssocsCrc +
+                ", owner='" + owner + '\'' +
+                ", readers=" + readers +
+                '}';
+    }
+
 }

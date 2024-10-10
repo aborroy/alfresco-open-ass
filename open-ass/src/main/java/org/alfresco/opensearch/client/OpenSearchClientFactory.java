@@ -4,6 +4,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.ssl.SSLContextBuilder;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.RestClientBuilder;
+import org.opensearch.client.RestHighLevelClient;
 import org.opensearch.client.json.jackson.JacksonJsonpMapper;
 import org.opensearch.client.opensearch.OpenSearchClient;
 import org.opensearch.client.transport.OpenSearchTransport;
@@ -55,6 +56,7 @@ public class OpenSearchClientFactory {
 
     private volatile OpenSearchClient openSearchClient;
     private volatile RestClient restClient;
+    private volatile RestHighLevelClient restHighLevelClient;
 
     /**
      * Initializes the OpenSearch client and REST client.
@@ -85,6 +87,7 @@ public class OpenSearchClientFactory {
      */
     private void initializeHttpClient(HttpHost hosts) {
         RestClientBuilder builder = RestClient.builder(hosts);
+        restHighLevelClient = new RestHighLevelClient(builder);
         restClient = builder.build();
         OpenSearchTransport transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
         openSearchClient = new OpenSearchClient(transport);
@@ -148,6 +151,18 @@ public class OpenSearchClientFactory {
             init();
         }
         return restClient;
+    }
+
+    /**
+     * Provides an instance of RestHighLevelClient. Initializes the client if not already done.
+     *
+     * @return RestHighLevelClient instance
+     */
+    public RestHighLevelClient getRestHighLevelClient() {
+        if (restHighLevelClient == null) {
+            init();
+        }
+        return restHighLevelClient;
     }
 
     /**

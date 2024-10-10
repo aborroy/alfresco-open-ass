@@ -5,10 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.alfresco.opensearch.client.OpenSearchClientFactory;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-import org.opensearch.client.RestClient;
-import org.opensearch.client.ResponseException;
+import org.opensearch.action.bulk.BulkItemResponse;
+import org.opensearch.action.bulk.BulkRequest;
+import org.opensearch.action.bulk.BulkResponse;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.client.*;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,8 +24,12 @@ import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
+import static org.alfresco.opensearch.shared.OpenSearchConstants.CONTENT_ID;
+import static org.opensearch.client.RequestOptions.DEFAULT;
+
 /**
- * Component for indexing documents into OpenSearch.
+ * Component for handling the indexing of documents into OpenSearch.
+ * It supports bulk indexing, document updates, and deletion of document segments in the index.
  */
 @Component
 public class Indexer {
@@ -43,104 +52,102 @@ public class Indexer {
     }
 
     /**
-     * Indexes a document with the specified UUID and text content into the OpenSearch index.
+     * Retrieves an instance of RestHighLevelClient from the factory.
      *
-     * @param uuid the UUID of the document
-     * @param contentId the id of the content
-     * @param name the UUID of the document
-     * @param text the text content of the document
+     * @return RestHighLevelClient instance
      */
-    public void index(String uuid, Long dbid, String contentId, String name, String text) {
+    private RestHighLevelClient restHighLevelClient() {
+        return openSearchClientFactory.getRestHighLevelClient();
+    }
+
+    /**
+     * Indexes documents in bulk using a BulkRequest.
+     * If there are failures during the indexing process, a RuntimeException is thrown.
+     *
+     * @param bulkRequest The request containing multiple documents to index.
+     * @throws Exception If any failures occur during the bulk indexing.
+     */
+    public void index(BulkRequest bulkRequest) throws Exception {
+        BulkResponse bulkResponse = restHighLevelClient().bulk(bulkRequest, DEFAULT);
+
+        if (bulkResponse.hasFailures()) {
+            for (BulkItemResponse bulkItemResponse : bulkResponse) {
+                if (bulkItemResponse.isFailed()) {
+                    LOG.error("OpenSearch indexing failure: {}", bulkItemResponse.getFailureMessage());
+                    bulkRequest.requests().forEach(request -> LOG.error(request.toString()));
+                    throw new RuntimeException(bulkItemResponse.getFailure().getCause());
+                }
+            }
+        }
+    }
+
+    /**
+     * Indexes or updates a document in OpenSearch with the provided UUID and content.
+     * The content and content ID are stored in the OpenSearch index using a Painless script.
+     *
+     * @param uuid      The UUID of the document.
+     * @param contentId The content ID of the document.
+     * @param text      The text content to be indexed.
+     */
+    public void indexContent(String uuid, String contentId, String text) {
         if (!text.isEmpty()) {
-            Request request = new Request("POST", "/" + indexName + "/_doc");
+            Request request = new Request("POST", "/" + indexName + "/_update/" + uuid);
             String jsonString = """
                     {
-                       "id": "%s",
-                       "dbid": %s,
-                       "contentId": %s,
-                       "name": "%s",
-                       "text": "%s"
+                        "script" : {
+                            "source": "ctx._source['%s'] = params.text; ctx._source['%s'] = params.contentId;",
+                            "lang": "painless",
+                            "params" : {
+                                "text": "%s",
+                                "contentId": "%s"
+                            }
+                        }
                     }
                     """;
-            String formattedJson = String.format(jsonString, uuid, dbid, contentId, name, text);
+            String formattedJson = String.format(jsonString, "cm%3Acontent", CONTENT_ID, text, contentId);
             request.setEntity(new StringEntity(formattedJson, ContentType.APPLICATION_JSON));
             try {
                 restClient().performRequest(request);
             } catch (Exception e) {
-                LOG.warn("Following segment has not been indexed due to the Exception: {}", e.getMessage());
+                LOG.warn("Document {} has not been updated due to the Exception: {}", uuid, e.getMessage());
                 LOG.debug(e.getMessage(), e);
                 LOG.warn(formattedJson);
             }
         }
     }
 
+    /**
+     * Retrieves the content ID for the specified document UUID from the OpenSearch index.
+     *
+     * @param uuid The UUID of the document to search for.
+     * @return The content ID associated with the document.
+     * @throws Exception If an error occurs while retrieving the content ID.
+     */
     public String getContentId(String uuid) throws Exception {
-
         String contentId = "";
 
-        Request request = new Request("GET", "/" + indexName + "/_search");
-        String jsonString = """
-                {
-                  "query": {
-                    "match": {
-                      "id": "%s_*"
-                    }
-                  }
-                }
-                """;
-        request.setEntity(new StringEntity(String.format(jsonString, uuid), ContentType.APPLICATION_JSON));
-        Response response = restClient().performRequest(request);
+        SearchRequest searchRequest = new SearchRequest(indexName);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.query(QueryBuilders.matchQuery("_id", uuid));
+        searchRequest.source(searchSourceBuilder);
 
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
-        JsonNode hitsNode = jsonResponse.path("hits").path("hits");
-        if (hitsNode.isArray() && !hitsNode.isEmpty()) {
-            JsonNode firstHitNode = hitsNode.get(0);
-            JsonNode contentIdNode = firstHitNode.path("_source").path("contentId");
-            contentId = contentIdNode.asText();
+        SearchResponse searchResponse = restHighLevelClient().search(searchRequest, RequestOptions.DEFAULT);
+        SearchHit[] searchHits = searchResponse.getHits().getHits();
+
+        if (searchHits.length > 0) {
+            contentId = (String) searchHits[0].getSourceAsMap().get(CONTENT_ID);
         }
 
         return contentId;
-
     }
 
     /**
-     * Deletes document segments from the index if they exist, based on the provided UUID.
+     * Asynchronously deletes document segments from the index associated with the given UUID.
+     * Retries the deletion up to 3 times with a 5-second delay between attempts to handle potential
+     * concurrency issues.
      *
-     * @param uuid The UUID of the document to be deleted.
-     * @throws IOException If an I/O exception occurs while interacting with OpenSearch.
-     */
-    public void deleteDocumentIfExists(String uuid) throws Exception {
-
-        Request request = new Request("GET", "/" + indexName + "/_search");
-        String jsonString = """
-                {
-                  "query": {
-                    "match": {
-                      "id": "%s_*"
-                    }
-                  }
-                }
-                """;
-        request.setEntity(new StringEntity(String.format(jsonString, uuid), ContentType.APPLICATION_JSON));
-        Response response = restClient().performRequest(request);
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        JsonNode jsonResponse = objectMapper.readTree(response.getEntity().getContent());
-        int totalValue = jsonResponse.get("hits").get("total").get("value").asInt();
-
-        if (totalValue > 0) {
-            deleteDocument(uuid);
-        }
-
-    }
-
-    /**
-     * Deletes document segments from the index, based on the provided UUID.
-     * Retries deletion asynchronously 3 times (5 sec delay) to handle concurrent document modifications.
-     *
-     * @param uuid The UUID of the document to be deleted.
-     * @throws IOException If an I/O exception occurs while interacting with OpenSearch.
+     * @param uuid The UUID of the document to delete.
+     * @throws Exception If an error occurs during deletion.
      */
     public void deleteDocument(String uuid) throws Exception {
         CompletableFuture.supplyAsync(() -> {
@@ -151,7 +158,7 @@ public class Indexer {
                         {
                           "query": {
                             "match": {
-                              "id": "%s_*"
+                              "id": "%s"
                             }
                           }
                         }
@@ -178,6 +185,4 @@ public class Indexer {
             return null;
         });
     }
-
-
 }

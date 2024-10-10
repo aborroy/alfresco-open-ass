@@ -25,4 +25,12 @@ public class NodeContainer {
     public void setNodes(List<Node> nodes) {
         this.nodes = nodes;
     }
+
+    @Override
+    public String toString() {
+        return "NodeContainer{" +
+                "nodes=" + nodes +
+                '}';
+    }
+
 }

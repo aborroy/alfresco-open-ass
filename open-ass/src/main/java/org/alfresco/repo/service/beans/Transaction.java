@@ -4,32 +4,22 @@ package org.alfresco.repo.service.beans;
  * Represents a transaction in the Alfresco repository.
  */
 public class Transaction {
-    private int id; // Unique identifier for the transaction
+    private long id; // Unique identifier for the transaction
     private long commitTimeMs; // Commit time of the transaction in milliseconds
     private int updates; // Number of updates in the transaction
     private int deletes; // Number of deletes in the transaction
 
     /**
-     * Constructs a Transaction object with the specified parameters.
-     *
-     * @param id           The unique identifier for the transaction.
-     * @param commitTimeMs The commit time of the transaction in milliseconds.
-     * @param updates      The number of updates in the transaction.
-     * @param deletes      The number of deletes in the transaction.
+     * Constructor for Jackson
      */
-    public Transaction(int id, long commitTimeMs, int updates, int deletes) {
-        this.id = id;
-        this.commitTimeMs = commitTimeMs;
-        this.updates = updates;
-        this.deletes = deletes;
-    }
+    public Transaction() {}
 
     /**
      * Retrieves the unique identifier of the transaction.
      *
      * @return The ID of the transaction.
      */
-    public int getId() {
+    public long getId() {
         return id;
     }
 
@@ -38,7 +28,7 @@ public class Transaction {
      *
      * @param id The ID of the transaction.
      */
-    public void setId(int id) {
+    public void setId(long id) {
         this.id = id;
     }
 
@@ -95,4 +85,15 @@ public class Transaction {
     public void setDeletes(int deletes) {
         this.deletes = deletes;
     }
+
+    @Override
+    public String toString() {
+        return "Transaction{" +
+                "id=" + id +
+                ", commitTimeMs=" + commitTimeMs +
+                ", updates=" + updates +
+                ", deletes=" + deletes +
+                '}';
+    }
+
 }

@@ -118,4 +118,16 @@ public class TransactionNode {
     public void setTenant(String tenant) {
         this.tenant = tenant;
     }
+
+    @Override
+    public String toString() {
+        return "TransactionNode{" +
+                "id=" + id +
+                ", nodeRef='" + nodeRef + '\'' +
+                ", txnId=" + txnId +
+                ", status='" + status + '\'' +
+                ", aclId=" + aclId +
+                ", tenant='" + tenant + '\'' +
+                '}';
+    }
 }
