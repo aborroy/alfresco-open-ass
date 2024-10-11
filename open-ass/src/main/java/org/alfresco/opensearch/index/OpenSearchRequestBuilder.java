@@ -109,11 +109,13 @@ public class OpenSearchRequestBuilder {
         addContentInfo(node, fields);
         setDocumentAlive(fields, true);
 
+        LOG.debug("Properties to be indexed for node {}: {}", node.getId(), fields);
+
         return fields;
     }
 
     private void addType(String type, Map<String, Object> fields) {
-        addEncodedField(fields, OpenSearchConstants.TYPE, type);
+        addEncodedField(fields, TYPE, type);
     }
 
     public static void addPrimaryHierarchy(List<String> ancestors, Map<String, Object> fields) {
@@ -121,17 +123,17 @@ public class OpenSearchRequestBuilder {
                 .filter(not(Collection::isEmpty))
                 .flatMap(hierarchy ->
                         hierarchy.stream().findFirst())
-                .ifPresent(primaryParent -> fields.put(OpenSearchConstants.PRIMARY_PARENT, primaryParent));
+                .ifPresent(primaryParent -> fields.put(PRIMARY_PARENT, primaryParent));
     }
 
     public static void addParents(Collection<String> allParents, Map<String, Object> outputFields) {
         ofNullable(allParents)
                 .filter(not(Collection::isEmpty))
-                .ifPresent(parents -> outputFields.put(OpenSearchConstants.PARENT, parents));
+                .ifPresent(parents -> outputFields.put(PARENT, parents));
     }
 
     private void addAclInformation(Node node, Map<String, Object> fields) {
-        addEncodedField(fields, OpenSearchConstants.READER, node.getReaders());
+        addEncodedField(fields, READER, node.getReaders());
     }
 
     private void addNodeTimeInformation(Node node, Map<String, Object> fields, long commitTimeMs) {
@@ -140,40 +142,40 @@ public class OpenSearchRequestBuilder {
 
     private void addUserInformation(Node node, Map<String, Object> fields) {
         ofNullable(node.getProperties().get("cm:creator"))
-                .ifPresent(creator -> addEncodedField(fields, OpenSearchConstants.USER_CREATOR, node.getProperties().get("cm:creator")));
+                .ifPresent(creator -> addEncodedField(fields, USER_CREATOR, node.getProperties().get("cm:creator")));
         ofNullable(node.getProperties().get("cm:modifier"))
-                .ifPresent(modifier -> addEncodedField(fields, OpenSearchConstants.USER_MODIFIER, node.getProperties().get("cm:modifier")));
+                .ifPresent(modifier -> addEncodedField(fields, USER_MODIFIER, node.getProperties().get("cm:modifier")));
     }
 
     private void addDateInformation(Node node, Map<String, Object> fields) {
         ofNullable(node.getProperties().get("cm:created"))
-                .ifPresent(creationDate -> addEncodedField(fields, OpenSearchConstants.CREATION_DATE_FIELD, node.getProperties().get("cm:created")));
+                .ifPresent(creationDate -> addEncodedField(fields, CREATION_DATE_FIELD, node.getProperties().get("cm:created")));
         ofNullable(node.getProperties().get("cm:modified"))
-                .ifPresent(modificationDate -> addEncodedField(fields, OpenSearchConstants.MODIFICATION_DATE_FIELD, node.getProperties().get("cm:modified")));
+                .ifPresent(modificationDate -> addEncodedField(fields, MODIFICATION_DATE_FIELD, node.getProperties().get("cm:modified")));
     }
 
     private void addName(Node node, Map<String, Object> fields) {
-        addEncodedField(fields, OpenSearchConstants.NAME, node.getProperties().get("cm:name"));
+        addEncodedField(fields, NAME, node.getProperties().get("cm:name"));
     }
 
     private void addProperties(Node node, Map<String, Object> fields) {
         if (node.getProperties() != null) {
             Map<String, Serializable> properties = new HashMap<>(node.getProperties());
-            properties.keySet().remove(OpenSearchConstants.CM_CONTENT_TR_STATUS);
-            properties.keySet().remove(OpenSearchConstants.CONTENT_ATTRIBUTE_NAME);
+            properties.keySet().remove(CM_CONTENT_TR_STATUS);
+            properties.keySet().remove(CONTENT_ATTRIBUTE_NAME);
             properties.forEach((key, value) -> addEncodedField(fields, key, value));
-            getOwner(properties, node).ifPresent(owner -> addEncodedField(fields, OpenSearchConstants.OWNER, owner));
-            addEncodedField(fields, OpenSearchConstants.PROPERTIES, properties.keySet());
+            getOwner(properties, node).ifPresent(owner -> addEncodedField(fields, OWNER, owner));
+            addEncodedField(fields, PROPERTIES, properties.keySet());
         }
     }
 
     private Optional<Serializable> getOwner(Map<String, Serializable> properties, Node node) {
-        return Optional.ofNullable(properties.get(OpenSearchConstants.OWNER_PROPERTY_NAME))
+        return Optional.ofNullable(properties.get(OWNER_PROPERTY_NAME))
                 .or(() -> Optional.ofNullable(node.getProperties().get("cm:modifier")));
     }
 
     private void addAspects(Node node, Map<String, Object> fields) {
-        addEncodedField(fields, OpenSearchConstants.ASPECT, node.getAspects());
+        addEncodedField(fields, ASPECT, node.getAspects());
     }
 
     private void addTags(List<NamePath> namePaths, Map<String, Object> fields) {
@@ -181,7 +183,7 @@ public class OpenSearchRequestBuilder {
                 .filter(namePath -> namePath.getNamePath().size() > 1 && "Tags".equals(namePath.getNamePath().get(0)))
                 .map(namePath -> namePath.getNamePath().get(1))
                 .collect(Collectors.toList());
-        addEncodedField(fields, OpenSearchConstants.TAG, tags);
+        addEncodedField(fields, TAG, tags);
     }
 
     protected void addContentInfo(Node node, Map<String, Object> fields) {
@@ -195,16 +197,18 @@ public class OpenSearchRequestBuilder {
     }
 
     private void setDocumentAlive(Map<String, Object> properties, boolean alive){
-        addEncodedField(properties, OpenSearchConstants.ALIVE, alive);
+        addEncodedField(properties, ALIVE, alive);
     }
 
     protected void addEncodedField(Map<String, Object> fields, String key, Object value) {
-        if (value instanceof Collection) {
-            value = processCollection(value);
-        } else {
-            value = prepareField(value);
-        }
-        fields.put(AlfrescoQualifiedNameTranslator.encode(key), value);
+       if (value instanceof Collection) {
+           value = processCollection(value);
+       } else if (value instanceof Map) {
+           value = processMap(value);
+       } else {
+           value = prepareField(value);
+       }
+       fields.put(AlfrescoQualifiedNameTranslator.encode(key), value);
     }
 
     /**
@@ -233,6 +237,13 @@ public class OpenSearchRequestBuilder {
             return value.toString();
         }
         return "";
+    }
+
+    private Object processMap(Object map) {
+        return ((Map<?, ?>) map).entrySet()
+                .stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .toList();
     }
 
     private Object processCollection(Object collection) {

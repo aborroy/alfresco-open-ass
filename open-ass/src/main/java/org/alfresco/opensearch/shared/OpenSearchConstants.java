@@ -32,9 +32,7 @@ public class OpenSearchConstants {
     public static final String CONTENT_MIME_TYPE = "cm:content.mimetype";
     public static final String CONTENT_SIZE = "cm:content.size";
     public static final String CONTENT_ENCODING = "cm:content.encoding";
-    /** The type of category and tag nodes. */
     public static final String CM_CATEGORY = "cm:category";
-    /** Name of the categories property in events. */
     public static final String CM_CATEGORIES = "cm:categories";
     public static final String CM_CONTENT_TR_EX = "cm:content.tr_ex";
     public static final String CM_CONTENT_TR_STATUS = "cm:content.tr_status";
