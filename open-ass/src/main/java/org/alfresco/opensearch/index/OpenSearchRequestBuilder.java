@@ -1,7 +1,6 @@
 package org.alfresco.opensearch.index;
 
 import org.alfresco.opensearch.shared.AlfrescoQualifiedNameTranslator;
-import org.alfresco.opensearch.shared.OpenSearchConstants;
 import org.alfresco.repo.service.beans.NamePath;
 import org.alfresco.repo.service.beans.Node;
 import org.opensearch.action.DocWriteRequest;
@@ -141,21 +140,21 @@ public class OpenSearchRequestBuilder {
     }
 
     private void addUserInformation(Node node, Map<String, Object> fields) {
-        ofNullable(node.getProperties().get("cm:creator"))
-                .ifPresent(creator -> addEncodedField(fields, USER_CREATOR, node.getProperties().get("cm:creator")));
-        ofNullable(node.getProperties().get("cm:modifier"))
-                .ifPresent(modifier -> addEncodedField(fields, USER_MODIFIER, node.getProperties().get("cm:modifier")));
+        ofNullable(node.getProperties().get(USER_CREATOR))
+                .ifPresent(creator -> addEncodedField(fields, USER_CREATOR, node.getProperties().get(USER_CREATOR)));
+        ofNullable(node.getProperties().get(USER_MODIFIER))
+                .ifPresent(modifier -> addEncodedField(fields, USER_MODIFIER, node.getProperties().get(USER_MODIFIER)));
     }
 
     private void addDateInformation(Node node, Map<String, Object> fields) {
-        ofNullable(node.getProperties().get("cm:created"))
-                .ifPresent(creationDate -> addEncodedField(fields, CREATION_DATE_FIELD, node.getProperties().get("cm:created")));
-        ofNullable(node.getProperties().get("cm:modified"))
-                .ifPresent(modificationDate -> addEncodedField(fields, MODIFICATION_DATE_FIELD, node.getProperties().get("cm:modified")));
+        ofNullable(node.getProperties().get(CREATION_DATE_FIELD))
+                .ifPresent(creationDate -> addEncodedField(fields, CREATION_DATE_FIELD, node.getProperties().get(CREATION_DATE_FIELD)));
+        ofNullable(node.getProperties().get(MODIFICATION_DATE_FIELD))
+                .ifPresent(modificationDate -> addEncodedField(fields, MODIFICATION_DATE_FIELD, node.getProperties().get(MODIFICATION_DATE_FIELD)));
     }
 
     private void addName(Node node, Map<String, Object> fields) {
-        addEncodedField(fields, NAME, node.getProperties().get("cm:name"));
+        addEncodedField(fields, NAME, node.getProperties().get(NAME));
     }
 
     private void addProperties(Node node, Map<String, Object> fields) {
@@ -171,7 +170,7 @@ public class OpenSearchRequestBuilder {
 
     private Optional<Serializable> getOwner(Map<String, Serializable> properties, Node node) {
         return Optional.ofNullable(properties.get(OWNER_PROPERTY_NAME))
-                .or(() -> Optional.ofNullable(node.getProperties().get("cm:modifier")));
+                .or(() -> Optional.ofNullable(node.getProperties().get(USER_MODIFIER)));
     }
 
     private void addAspects(Node node, Map<String, Object> fields) {
@@ -187,7 +186,7 @@ public class OpenSearchRequestBuilder {
     }
 
     protected void addContentInfo(Node node, Map<String, Object> fields) {
-        Object contentObj = node.getProperties().get("cm:content");
+        Object contentObj = node.getProperties().get(CONTENT_ATTRIBUTE_NAME);
         if(contentObj != null) {
             Map<String, String> content = (Map<String, String>) contentObj;
             addEncodedField(fields, CONTENT_MIME_TYPE, content.get("mimetype"));

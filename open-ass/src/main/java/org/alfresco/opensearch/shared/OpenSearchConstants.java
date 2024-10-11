@@ -2,7 +2,6 @@ package org.alfresco.opensearch.shared;
 
 public class OpenSearchConstants {
 
-    // Output properties - Property names used for indexing
     public static final String ALIVE = "ALIVE";
     public static final String READER = "READER";
     public static final String DENIED = "DENIED";
@@ -37,11 +36,9 @@ public class OpenSearchConstants {
     public static final String CM_CONTENT_TR_EX = "cm:content.tr_ex";
     public static final String CM_CONTENT_TR_STATUS = "cm:content.tr_status";
 
-    // Input properties - Property names used for taking information from the event
     public static final String OWNER_PROPERTY_NAME = "cm:owner";
     public static final String TYPE_STORE_ROOT = "sys:store_root";
     public static final String TYPE_DELETED = "sys:deleted";
 
-    // Other
     public static final String CM_CATEGORY_ROOT = "/cm:categoryRoot/cm:generalclassifiable/";
 }

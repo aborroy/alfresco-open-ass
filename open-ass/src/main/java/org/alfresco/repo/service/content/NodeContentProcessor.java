@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static org.alfresco.opensearch.shared.OpenSearchConstants.CONTENT_ATTRIBUTE_NAME;
 import static org.alfresco.opensearch.shared.OpenSearchConstants.CONTENT_ID;
 import static org.alfresco.utils.NodeUtils.extractUuidFromNodeRef;
 
@@ -81,7 +82,7 @@ public class NodeContentProcessor {
         String storeIdentifier = (String) node.getProperties().get("sys:store-identifier");
 
         // Check if 'cm:content' exists and is not null
-        Map<?, ?> contentMap = (Map<?, ?>) node.getProperties().get("cm:content");
+        Map<?, ?> contentMap = (Map<?, ?>) node.getProperties().get(CONTENT_ATTRIBUTE_NAME);
         if (contentMap == null || !contentMap.containsKey(CONTENT_ID) || contentMap.get(CONTENT_ID) == null) {
             LOG.debug("Skipping node ID {}: 'cm:content' or 'CONTENT_ID' is missing or null", uuid);
             return;
