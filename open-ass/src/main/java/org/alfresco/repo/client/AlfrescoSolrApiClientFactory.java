@@ -1,4 +1,4 @@
-package org.alfresco.opensearch.client;
+package org.alfresco.repo.client;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -39,7 +39,7 @@ public class AlfrescoSolrApiClientFactory {
      */
     public static final String X_ALFRESCO_SEARCH_SECRET = "X-Alfresco-Search-Secret";
 
-    private static final Logger logger = LoggerFactory.getLogger(AlfrescoSolrApiClientFactory.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AlfrescoSolrApiClientFactory.class);
 
     @Value("${content.service.url}")
     private String url;
@@ -101,7 +101,7 @@ public class AlfrescoSolrApiClientFactory {
             try {
                 httpClient.close();
             } catch (IOException e) {
-                logger.error("Error closing HttpClient", e);
+                LOG.error("Error closing HttpClient", e);
             }
         }
     }
@@ -124,7 +124,7 @@ public class AlfrescoSolrApiClientFactory {
                     })
                     .build();
         } catch (Exception e) {
-            logger.error("Error creating HttpClient", e);
+            LOG.error("Error creating HttpClient", e);
             return null;
         }
     }
@@ -155,7 +155,7 @@ public class AlfrescoSolrApiClientFactory {
                     .evictExpiredConnections()
                     .build();
         } catch (Exception e) {
-            logger.error("Error creating mTLS HttpClient", e);
+            LOG.error("Error creating mTLS HttpClient", e);
             return null;
         }
     }

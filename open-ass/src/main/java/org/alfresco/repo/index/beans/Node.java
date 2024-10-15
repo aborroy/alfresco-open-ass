@@ -1,6 +1,6 @@
-package org.alfresco.repo.service.beans;
+package org.alfresco.repo.index.beans;
 
-import org.alfresco.repo.service.ModelMappingService;
+import org.alfresco.indexer.ModelMappingIndexer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -170,7 +170,7 @@ public class Node {
                 throw new IllegalArgumentException("Key must contain a closing brace '}'");
             }
 
-            String prefix = ModelMappingService.URL_TO_PREFIX.get(key.substring(0, lastIndex + 1));
+            String prefix = ModelMappingIndexer.URL_TO_PREFIX.get(key.substring(0, lastIndex + 1));
             if (prefix == null) {
                 LOG.error("Prefix missing for key '{}' in node '{}'. The Custom Content Model might not be deployed in the Repository. " +
                         "Please verify that the model is correctly registered and deployed.", key, nodeRef);

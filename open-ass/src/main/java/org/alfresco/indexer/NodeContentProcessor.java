@@ -1,9 +1,9 @@
-package org.alfresco.repo.service.content;
+package org.alfresco.indexer;
 
 import jakarta.annotation.PostConstruct;
-import org.alfresco.opensearch.client.AlfrescoSolrApiClientFactory;
 import org.alfresco.opensearch.ingest.Indexer;
-import org.alfresco.repo.service.beans.Node;
+import org.alfresco.repo.index.AlfrescoService;
+import org.alfresco.repo.index.beans.Node;
 import org.alfresco.utils.JsonUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,7 +37,7 @@ public class NodeContentProcessor {
     private int contentThreads;
 
     @Autowired
-    private AlfrescoSolrApiClientFactory alfrescoSolrApiClient;
+    AlfrescoService alfrescoService;
 
     @Autowired
     private Indexer indexer;
@@ -95,7 +95,7 @@ public class NodeContentProcessor {
             String contentIdInOS = indexer.getContentId(uuid);
             // Reindex only if the content ID has changed
             if (!contentId.equals(contentIdInOS)) {
-                String content = alfrescoSolrApiClient.executeGetRequest("textContent?nodeId=" + node.getId());
+                String content = alfrescoService.getNodeContent(node.getId());
                 indexer.indexContent(uuid, contentId, JsonUtils.escape(content));
                 LOG.debug("Indexed content for node ID {} with new content ID {}", uuid, contentId);
             } else {

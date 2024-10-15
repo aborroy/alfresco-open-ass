@@ -1,4 +1,4 @@
-package org.alfresco.repo.service.beans;
+package org.alfresco.repo.index.beans;
 
 import java.io.Serializable;
 import java.util.List;

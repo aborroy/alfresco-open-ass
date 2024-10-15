@@ -1,9 +1,10 @@
-package org.alfresco.repo.service;
+package org.alfresco.indexer;
 
 import jakarta.annotation.PostConstruct;
 import org.alfresco.opensearch.index.IndexService;
-import org.alfresco.repo.service.beans.Transaction;
-import org.alfresco.repo.service.beans.TransactionContainer;
+import org.alfresco.repo.index.AlfrescoService;
+import org.alfresco.repo.index.beans.Transaction;
+import org.alfresco.repo.index.beans.TransactionContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,9 +21,9 @@ import java.util.Optional;
  * index control status. It also ensures model mappings are synchronized before processing.
  */
 @Service
-public class BatchIndexerService {
+public class BatchIndexer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(BatchIndexerService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(BatchIndexer.class);
 
     @Value("${batch.indexer.transaction.maxResults}")
     private int maxResults;
@@ -31,10 +32,13 @@ public class BatchIndexerService {
     private IndexService indexService;
 
     @Autowired
-    private ModelMappingService modelMappingService;
+    private AlfrescoService alfrescoService;
 
     @Autowired
-    private NodeProcessorService nodeProcessorService;
+    private ModelMappingIndexer modelMappingIndexer;
+
+    @Autowired
+    private NodeProcessorIndexer nodeProcessorIndexer;
 
     /**
      * Initializes the service by creating Alfresco-specific indexes in OpenSearch.
@@ -58,13 +62,13 @@ public class BatchIndexerService {
     public void index() throws Exception {
         // Synchronize model mappings before processing transactions.
         LOG.debug("Syncing model mappings before starting the indexing process.");
-        modelMappingService.syncMappingFromModels();
+        modelMappingIndexer.syncMappingFromModels();
 
         // Get the last successfully indexed transaction ID, and fetch new transactions from Alfresco.
         long lastTransactionId = indexService.getAlfrescoControlIndexStatus() + 1;
         LOG.debug("Last indexed transaction ID: {}. Fetching new transactions.", lastTransactionId);
 
-        TransactionContainer retrievedTransactions = nodeProcessorService.retrieveTransactions(lastTransactionId, maxResults);
+        TransactionContainer retrievedTransactions = alfrescoService.retrieveTransactions(lastTransactionId, maxResults);
         LOG.debug("Retrieved {} transactions from Alfresco.", retrievedTransactions.getTransactions().size());
 
         // Set the initial min/max transaction IDs for the current batch.
@@ -90,7 +94,7 @@ public class BatchIndexerService {
 
             // Process transactions and index them into OpenSearch.
             LOG.debug("Processing transactions with minTxnId: {} and maxTxnId: {}", minTxnId, maxTxnId);
-            nodeProcessorService.processTransactions(minTxnId, maxTxnId, retrievedTransactions.getMaxTxnCommitTime());
+            nodeProcessorIndexer.processTransactions(minTxnId, maxTxnId, retrievedTransactions.getMaxTxnCommitTime());
 
             // Update the control index with the highest indexed transaction ID.
             LOG.debug("Updating control index status with maxTxnId: {}", maxTxnId);

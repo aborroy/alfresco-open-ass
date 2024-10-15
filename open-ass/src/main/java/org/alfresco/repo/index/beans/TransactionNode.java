@@ -1,4 +1,4 @@
-package org.alfresco.repo.service.beans;
+package org.alfresco.repo.index.beans;
 
 /**
  * Represents a node involved in a transaction in the Alfresco repository.

@@ -1,8 +1,8 @@
 package org.alfresco.opensearch.index;
 
 import org.alfresco.opensearch.shared.AlfrescoQualifiedNameTranslator;
-import org.alfresco.repo.service.beans.NamePath;
-import org.alfresco.repo.service.beans.Node;
+import org.alfresco.repo.index.beans.NamePath;
+import org.alfresco.repo.index.beans.Node;
 import org.opensearch.action.DocWriteRequest;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.update.UpdateRequest;

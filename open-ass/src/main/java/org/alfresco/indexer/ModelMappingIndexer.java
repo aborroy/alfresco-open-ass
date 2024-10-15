@@ -1,10 +1,9 @@
-package org.alfresco.repo.service;
+package org.alfresco.indexer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.alfresco.opensearch.client.AlfrescoSolrApiClientFactory;
-import org.alfresco.repo.service.beans.Diff;
-import org.alfresco.repo.service.beans.Model;
-import org.alfresco.repo.service.beans.ModelDiffs;
+import org.alfresco.repo.index.AlfrescoService;
+import org.alfresco.repo.index.beans.Diff;
+import org.alfresco.repo.index.beans.Model;
+import org.alfresco.repo.index.beans.ModelDiffs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,8 +15,6 @@ import org.xml.sax.InputSource;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -27,12 +24,12 @@ import java.util.TreeMap;
  * a map where each model's QName is mapped to its associated prefix.
  */
 @Service
-public class ModelMappingService {
+public class ModelMappingIndexer {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ModelMappingService.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ModelMappingIndexer.class);
 
     @Autowired
-    private AlfrescoSolrApiClientFactory alfrescoSolrApiClient;
+    AlfrescoService alfrescoService;
 
     // Mapping Model QName to prefix, e.g., "http://www.alfresco.org/model/content/1.0" to "cm"
     public static final Map<String, String> URL_TO_PREFIX = new TreeMap<>();
@@ -46,38 +43,20 @@ public class ModelMappingService {
     public void syncMappingFromModels() throws Exception {
         LOG.debug("Starting synchronization of model mappings.");
 
-        String payload = "{\"models\": [] }";
-        String modelsDiffResponse = alfrescoSolrApiClient.executePostRequest("modelsdiff", payload);
-        LOG.debug("Received models difference response: {}", modelsDiffResponse);
-
-        ObjectMapper objectMapper = new ObjectMapper();
-        ModelDiffs modelDiffs = objectMapper.readValue(modelsDiffResponse, ModelDiffs.class);
+        ModelDiffs modelDiffs = alfrescoService.getModelDiffs();
 
         // Clear previous mappings before synchronization
         URL_TO_PREFIX.clear();
 
         for (Diff modelEntry : modelDiffs.getDiffs()) {
             String modelQName = modelEntry.getName();
-            String xmlContent = fetchModelXmlContent(modelQName);
+            String xmlContent = alfrescoService.fetchModelXmlContent(modelQName);
             Model model = parseModelXml(xmlContent, modelQName);
             URL_TO_PREFIX.put(model.getQname(), model.getPrefix());
             LOG.debug("Updated URL_TO_PREFIX map with QName: {} and Prefix: {}", model.getQname(), model.getPrefix());
         }
 
         LOG.debug("Model synchronization complete. Total models synchronized: {}", URL_TO_PREFIX.size());
-    }
-
-    /**
-     * Fetches the XML content of a model from the Alfresco Solr API.
-     *
-     * @param modelQName the QName of the model.
-     * @return the XML content of the model as a String.
-     * @throws Exception if an error occurs while fetching the model XML.
-     */
-    private String fetchModelXmlContent(String modelQName) throws Exception {
-        String endpoint = String.format("model?modelQName=%s", URLEncoder.encode(modelQName, StandardCharsets.UTF_8));
-        LOG.debug("Sending GET request to endpoint: {}", endpoint);
-        return alfrescoSolrApiClient.executeGetRequest(endpoint);
     }
 
     /**
