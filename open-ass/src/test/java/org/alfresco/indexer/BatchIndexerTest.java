@@ -61,7 +61,7 @@ public class BatchIndexerTest {
     static void registerDynamicProperties(org.springframework.test.context.DynamicPropertyRegistry registry) {
         registry.add("content.service.url", () -> "http://" + alfrescoContainer.getHost() + ":" + alfrescoContainer.getMappedPort(8080));
         registry.add("opensearch.host", opensearchContainer::getHost);
-        registry.add("opensearch.port", () -> opensearchContainer.getMappedPort(9200));  // Assuming 9200 is the internal port
+        registry.add("opensearch.port", () -> opensearchContainer.getMappedPort(9200));
     }
 
     /**
