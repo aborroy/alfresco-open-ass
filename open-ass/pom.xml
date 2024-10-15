@@ -56,6 +56,17 @@
       <groupId>org.alfresco</groupId>
       <artifactId>alfresco-acs-java-rest-api-spring-boot-starter</artifactId>
       <version>6.2.0</version>
+      <exclusions>
+        <exclusion>
+          <groupId>commons-io</groupId>
+          <artifactId>commons-io</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.15.0</version>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
