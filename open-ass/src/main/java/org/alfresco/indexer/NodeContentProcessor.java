@@ -22,8 +22,9 @@ import static org.alfresco.opensearch.shared.OpenSearchConstants.CONTENT_ID;
 import static org.alfresco.utils.NodeUtils.extractUuidFromNodeRef;
 
 /**
- * This class processes node content asynchronously for indexing, interacting with the Alfresco Solr API 
- * and ensuring only nodes with updated content are reindexed.
+ * Service responsible for processing node content asynchronously for indexing.
+ * Interacts with the Alfresco Solr API and ensures that only nodes with updated
+ * content are reindexed in OpenSearch.
  */
 @Component
 public class NodeContentProcessor {
@@ -37,13 +38,14 @@ public class NodeContentProcessor {
     private int contentThreads;
 
     @Autowired
-    AlfrescoService alfrescoService;
+    private AlfrescoService alfrescoService;
 
     @Autowired
     private Indexer indexer;
 
     /**
-     * Initializes the thread pool for processing nodes concurrently.
+     * Initializes the thread pool for asynchronous node content processing.
+     * This setup ensures that multiple nodes are processed concurrently.
      */
     @PostConstruct
     public void init() {
@@ -52,36 +54,50 @@ public class NodeContentProcessor {
     }
 
     /**
-     * Processes a list of nodes asynchronously, submitting tasks to the executor service for each node.
-     * Any exceptions that occur during node content processing are logged but do not stop the execution of
-     * other nodes.
+     * Asynchronously processes a list of nodes, submitting each node to the executor
+     * service for parallel processing. Errors encountered during processing are
+     * logged and do not halt execution for other nodes.
      *
-     * @param nodes the list of nodes to process
+     * @param nodes the list of nodes to process asynchronously
      */
     public void processNodeContentAsync(List<Node> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            LOG.warn("No nodes provided for content processing.");
+            return;
+        }
+
+        LOG.debug("Submitting {} nodes for asynchronous content processing.", nodes.size());
+
         CompletableFuture.runAsync(() ->
                 nodes.forEach(node -> executorService.submit(() -> {
                     try {
-                        LOG.debug("Processing node content: {}", node);
+                        LOG.debug("Processing content for node: {}", node.getNodeRef());
                         processNodeContent(node);
                     } catch (Exception e) {
-                        LOG.error("Error processing content for node: {}", node, e);
+                        LOG.error("Error processing content for node: {}", node.getNodeRef(), e);
                     }
                 })), executorService);
     }
 
     /**
-     * Processes an individual node by retrieving its content and indexing it if applicable.
-     * Only nodes from the "SpacesStore" with a valid 'cm:content' property are considered for indexing.
+     * Processes the content of an individual node. The node is only indexed
+     * if it belongs to the "SpacesStore" and its 'cm:content' property is valid.
+     * If the content has changed since the last index operation, the content is
+     * reindexed in OpenSearch.
      *
-     * @param node the node to process
-     * @throws Exception if an error occurs during node processing
+     * @param node the node to process and index
+     * @throws Exception if an error occurs during node content retrieval or indexing
      */
     private void processNodeContent(Node node) throws Exception {
+        if (node == null || node.getNodeRef() == null) {
+            LOG.warn("Invalid node or node reference is null, skipping processing.");
+            return;
+        }
+
         String uuid = extractUuidFromNodeRef(node.getNodeRef());
         String storeIdentifier = (String) node.getProperties().get("sys:store-identifier");
 
-        // Check if 'cm:content' exists and is not null
+        // Check if 'cm:content' property exists and is valid
         Map<?, ?> contentMap = (Map<?, ?>) node.getProperties().get(CONTENT_ATTRIBUTE_NAME);
         if (contentMap == null || !contentMap.containsKey(CONTENT_ID) || contentMap.get(CONTENT_ID) == null) {
             LOG.debug("Skipping node ID {}: 'cm:content' or 'CONTENT_ID' is missing or null", uuid);
@@ -90,19 +106,26 @@ public class NodeContentProcessor {
 
         String contentId = contentMap.get(CONTENT_ID).toString();
 
-        // Skip nodes in non-indexable stores
+        // Only process nodes from the "SpacesStore"
         if (SPACES_STORE.equals(storeIdentifier)) {
             String contentIdInOS = indexer.getContentId(uuid);
-            // Reindex only if the content ID has changed
+
+            // Reindex if content ID has changed
             if (!contentId.equals(contentIdInOS)) {
-                String content = alfrescoService.getNodeContent(node.getId());
-                indexer.indexContent(uuid, contentId, JsonUtils.escape(content));
-                LOG.debug("Indexed content for node ID {} with new content ID {}", uuid, contentId);
+                try {
+                    LOG.debug("Fetching content for node ID {} with new content ID {}", uuid, contentId);
+                    String content = alfrescoService.getNodeContent(node.getId());
+                    indexer.indexContent(uuid, contentId, JsonUtils.escape(content));
+                    LOG.info("Successfully indexed content for node ID {} with new content ID {}", uuid, contentId);
+                } catch (Exception e) {
+                    LOG.error("Failed to index content for node ID {}: {}", uuid, e.getMessage());
+                    throw e;
+                }
             } else {
-                LOG.debug("Skipping indexing for node ID {}: Content ID has not changed: {}", uuid, contentId);
+                LOG.debug("Skipping reindexing for node ID {}: Content ID is unchanged: {}", uuid, contentId);
             }
         } else {
-            LOG.debug("Skipping indexing for node ID {}: not in SpacesStore", uuid);
+            LOG.debug("Skipping node ID {}: Node is not stored in SpacesStore", uuid);
         }
     }
 }

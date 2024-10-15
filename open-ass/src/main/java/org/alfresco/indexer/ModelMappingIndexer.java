@@ -29,7 +29,7 @@ public class ModelMappingIndexer {
     private static final Logger LOG = LoggerFactory.getLogger(ModelMappingIndexer.class);
 
     @Autowired
-    AlfrescoService alfrescoService;
+    private AlfrescoService alfrescoService;
 
     // Mapping Model QName to prefix, e.g., "http://www.alfresco.org/model/content/1.0" to "cm"
     public static final Map<String, String> URL_TO_PREFIX = new TreeMap<>();
@@ -43,20 +43,31 @@ public class ModelMappingIndexer {
     public void syncMappingFromModels() throws Exception {
         LOG.debug("Starting synchronization of model mappings.");
 
+        // Fetch the model diffs from Alfresco
         ModelDiffs modelDiffs = alfrescoService.getModelDiffs();
 
         // Clear previous mappings before synchronization
+        LOG.debug("Clearing existing URL_TO_PREFIX mappings.");
         URL_TO_PREFIX.clear();
 
+        // Process each model diff
         for (Diff modelEntry : modelDiffs.getDiffs()) {
             String modelQName = modelEntry.getName();
-            String xmlContent = alfrescoService.fetchModelXmlContent(modelQName);
-            Model model = parseModelXml(xmlContent, modelQName);
-            URL_TO_PREFIX.put(model.getQname(), model.getPrefix());
-            LOG.debug("Updated URL_TO_PREFIX map with QName: {} and Prefix: {}", model.getQname(), model.getPrefix());
+            try {
+                // Fetch and parse the model's XML content
+                LOG.debug("Fetching and parsing XML content for model QName: {}", modelQName);
+                String xmlContent = alfrescoService.getModelXmlContent(modelQName);
+                Model model = parseModelXml(xmlContent, modelQName);
+
+                // Update the model mappings with QName and prefix
+                URL_TO_PREFIX.put(model.getQname(), model.getPrefix());
+                LOG.debug("Updated URL_TO_PREFIX map with QName: {} and Prefix: {}", model.getQname(), model.getPrefix());
+            } catch (Exception e) {
+                LOG.error("Error processing model QName: {}. Skipping model. Error: {}", modelQName, e.getMessage(), e);
+            }
         }
 
-        LOG.debug("Model synchronization complete. Total models synchronized: {}", URL_TO_PREFIX.size());
+        LOG.info("Model synchronization complete. Total models synchronized: {}", URL_TO_PREFIX.size());
     }
 
     /**
@@ -69,6 +80,7 @@ public class ModelMappingIndexer {
      */
     private Model parseModelXml(String xmlContent, String modelQName) throws Exception {
         LOG.debug("Parsing XML content for model QName: {}", modelQName);
+
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         DocumentBuilder builder = factory.newDocumentBuilder();
@@ -76,12 +88,16 @@ public class ModelMappingIndexer {
         Document document = builder.parse(inputSource);
         document.getDocumentElement().normalize();
 
+        // Extract the model element from the XML document
         Element modelElement = (Element) document.getElementsByTagNameNS("*", "model").item(0);
         String nameAttribute = modelElement.getAttribute("name");
 
-        return new Model()
-                .withName(modelQName.substring(modelQName.lastIndexOf("}") + 1))
-                .withQname(modelQName.substring(0, modelQName.lastIndexOf("}") + 1))
-                .withPrefix(nameAttribute.substring(0, nameAttribute.indexOf(":")));
+        // Build and return the Model object
+        String prefix = nameAttribute.substring(0, nameAttribute.indexOf(":"));
+        String qname = modelQName.substring(0, modelQName.lastIndexOf("}") + 1);
+        String name = modelQName.substring(modelQName.lastIndexOf("}") + 1);
+        LOG.debug("Successfully parsed model QName: {} with prefix: {}", qname, prefix);
+
+        return new Model().withName(name).withQname(qname).withPrefix(prefix);
     }
 }

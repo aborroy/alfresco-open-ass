@@ -64,12 +64,14 @@ public class BatchIndexer {
         LOG.debug("Syncing model mappings before starting the indexing process.");
         modelMappingIndexer.syncMappingFromModels();
 
-        // Get the last successfully indexed transaction ID, and fetch new transactions from Alfresco.
+        // Get the last successfully indexed transaction ID.
         long lastTransactionId = indexService.getAlfrescoControlIndexStatus() + 1;
         LOG.debug("Last indexed transaction ID: {}. Fetching new transactions.", lastTransactionId);
 
+        // Retrieve new transactions from Alfresco.
         TransactionContainer retrievedTransactions = alfrescoService.retrieveTransactions(lastTransactionId, maxResults);
-        LOG.debug("Retrieved {} transactions from Alfresco.", retrievedTransactions.getTransactions().size());
+        int transactionCount = retrievedTransactions.getTransactions().size();
+        LOG.debug("Retrieved {} transactions from Alfresco.", transactionCount);
 
         // Set the initial min/max transaction IDs for the current batch.
         long minTxnId = lastTransactionId;
@@ -80,7 +82,7 @@ public class BatchIndexer {
         LOG.debug("Maximum transaction ID in Alfresco: {}", maxTxnIdRepository);
 
         // Process and index transactions if any are retrieved.
-        if (!retrievedTransactions.getTransactions().isEmpty()) {
+        if (transactionCount > 0) {
             // Determine the minimum and maximum transaction IDs in the batch.
             Optional<Long> optionalMinTxnId = retrievedTransactions.getTransactions().stream()
                     .map(Transaction::getId).min(Long::compare);

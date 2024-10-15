@@ -17,9 +17,9 @@ import java.util.stream.Collectors;
 import static org.alfresco.utils.NodeUtils.extractUuidFromNodeRef;
 
 /**
- * Service for processing nodes and transactions using the Alfresco Solr API and OpenSearch.
- * This class handles the retrieval of transactions, processing of node metadata,
- * indexing of nodes, and deletion of nodes from the index.
+ * Service responsible for processing nodes and transactions using Alfresco's Solr API and OpenSearch.
+ * This service handles the retrieval of transactions, processing of node metadata,
+ * indexing of nodes, and deletion of nodes from the OpenSearch index.
  */
 @Service
 public class NodeProcessorIndexer {
@@ -41,11 +41,12 @@ public class NodeProcessorIndexer {
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Processes transactions between the specified minimum and maximum transaction IDs.
+     * Processes a range of transactions based on their transaction IDs.
+     * Retrieves the nodes from each transaction and processes them based on their status (update/delete).
      *
-     * @param minTxnId           the minimum transaction ID to process
-     * @param maxTxnId           the maximum transaction ID to process
-     * @param maxTxnCommitTime   the maximum commit time for the transaction list
+     * @param minTxnId         the minimum transaction ID to process
+     * @param maxTxnId         the maximum transaction ID to process
+     * @param maxTxnCommitTime the maximum commit time to process up to
      * @throws Exception if an error occurs during transaction processing
      */
     public void processTransactions(long minTxnId, long maxTxnId, long maxTxnCommitTime) throws Exception {
@@ -61,80 +62,92 @@ public class NodeProcessorIndexer {
     }
 
     /**
-     * Processes an individual raw node, handling metadata retrieval and indexing.
+     * Processes an individual raw node by retrieving its metadata and handling its indexing or deletion
+     * based on the node's status.
      *
-     * @param transactionNode     the raw node to process
-     * @param maxTxnCommitTime    the maximum commit time for the transaction list
-     * @throws Exception if an error occurs during processing
+     * @param transactionNode  the transaction node to process
+     * @param maxTxnCommitTime the maximum commit time for processing the node
+     * @throws Exception if an error occurs during node processing
      */
     private void processRawNode(TransactionNode transactionNode, long maxTxnCommitTime) throws Exception {
         NodeContainer nodeContainer = alfrescoService.getMetadata(transactionNode.getId());
         LOG.debug("Received metadata for node ID {}", transactionNode.getId());
 
         switch (transactionNode.getStatus()) {
-            case "u":
+            case "u":  // Updated node
                 LOG.debug("Processing updated node with ID {}", transactionNode.getId());
                 processUpdatedNode(nodeContainer, maxTxnCommitTime);
                 break;
 
-            case "d":
+            case "d":  // Deleted node
                 LOG.debug("Processing deleted node with ID {}", transactionNode.getId());
                 processDeletedNode(transactionNode);
                 break;
 
             default:
-                LOG.error("Unknown status: {}", transactionNode.getStatus());
+                LOG.error("Unknown status '{}' for node with ID {}", transactionNode.getStatus(), transactionNode.getId());
                 throw new IllegalArgumentException("Unknown status: " + transactionNode.getStatus());
         }
     }
 
     /**
-     * Processes an updated node by retrieving its metadata and indexing it.
+     * Processes an updated node by setting the appropriate readers based on ACL IDs and indexing the node.
      *
-     * @param nodeContainer     the response containing the node metadata
-     * @param maxTxnCommitTime    the maximum commit time for the transaction list
-     * @throws Exception if an error occurs during processing
+     * @param nodeContainer    the container holding node metadata
+     * @param maxTxnCommitTime the maximum commit time for processing the node
+     * @throws Exception if an error occurs during node processing or indexing
      */
     private void processUpdatedNode(NodeContainer nodeContainer, long maxTxnCommitTime) throws Exception {
-        LOG.debug("Processing updated node. Metadata received for {} nodes", nodeContainer.getNodes().size());
+        if (nodeContainer == null || nodeContainer.getNodes().isEmpty()) {
+            LOG.warn("No nodes found for processing.");
+            return;
+        }
+
+        LOG.debug("Processing {} updated nodes", nodeContainer.getNodes().size());
 
         Set<Integer> uniqueAclIds = nodeContainer.getNodes().stream()
                 .map(Node::getAclId)
                 .collect(Collectors.toSet());
         LOG.debug("Fetching ACL readers for {} unique ACL IDs", uniqueAclIds.size());
 
-        Map<Integer, List<String>> aclIdToReadersMap = alfrescoService.fetchAclReaders(uniqueAclIds);
-
+        Map<Integer, List<String>> aclIdToReadersMap = alfrescoService.getAclReaders(uniqueAclIds);
         setReadersForNodes(nodeContainer, aclIdToReadersMap);
+
+        // Build and execute bulk indexing request
         BulkRequest bulkRequest = openSearchRequestBuilder.buildBulkRequest(nodeContainer.getNodes(), maxTxnCommitTime);
         LOG.debug("Indexing {} nodes in bulk", nodeContainer.getNodes().size());
         indexer.index(bulkRequest);
 
-        // Update content for indexed nodes asynchronously
+        // Process the content for the updated nodes asynchronously
         nodeContentProcessor.processNodeContentAsync(nodeContainer.getNodes());
     }
 
     /**
-     * Sets readers for each node and logs the action.
+     * Associates the readers for each node from the ACL-to-reader mapping and logs the assignment.
      *
-     * @param nodeContainer           the container holding nodes to process
-     * @param aclIdToReadersMap      the map of ACL ID to list of readers
+     * @param nodeContainer       the container holding nodes to process
+     * @param aclIdToReadersMap   the map of ACL ID to list of readers
      */
     private void setReadersForNodes(NodeContainer nodeContainer, Map<Integer, List<String>> aclIdToReadersMap) {
         for (Node node : nodeContainer.getNodes()) {
-            List<String> readers = aclIdToReadersMap.get(node.getAclId());
+            List<String> readers = aclIdToReadersMap.getOrDefault(node.getAclId(), Collections.emptyList());
             node.setReaders(readers);
             LOG.debug("Set readers for node ID {}: {}", node.getId(), readers);
         }
     }
 
     /**
-     * Processes a deleted node by removing it from the index.
+     * Processes a node marked as deleted by removing it from the index.
      *
      * @param transactionNode the node to delete
-     * @throws Exception if an error occurs during deletion
+     * @throws Exception if an error occurs during deletion from the index
      */
     private void processDeletedNode(TransactionNode transactionNode) throws Exception {
+        if (transactionNode == null || transactionNode.getNodeRef() == null) {
+            LOG.warn("Transaction node or NodeRef is null, skipping deletion.");
+            return;
+        }
+
         String uuid = extractUuidFromNodeRef(transactionNode.getNodeRef());
         LOG.debug("Deleting document with NodeRef {}", transactionNode.getNodeRef());
         indexer.deleteDocument(uuid);
