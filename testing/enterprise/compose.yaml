@@ -2,7 +2,7 @@ services:
   alfresco:
     image: quay.io/alfresco/alfresco-content-repository:${ALFRESCO_TAG}
     environment:
-      JAVA_TOOL_OPTIONS: "
+      JAVA_TOOL_OPTIONS: >-
         -Dencryption.keystore.type=JCEKS
         -Dencryption.cipherAlgorithm=DESede/CBC/PKCS5Padding
         -Dencryption.keyAlgorithm=DESede
@@ -11,8 +11,7 @@ services:
         -Dmetadata-keystore.aliases=metadata
         -Dmetadata-keystore.metadata.password=oKIWzVdEdA
         -Dmetadata-keystore.metadata.algorithm=DESede
-        "
-      JAVA_OPTS: "
+      JAVA_OPTS: >-
         -Ddb.driver=org.postgresql.Driver
         -Ddb.username=alfresco
         -Ddb.password=alfresco
@@ -28,7 +27,7 @@ services:
         -Dalfresco.host=localhost
         -Dalfresco.port=8080
         -Daos.baseUrlOverwrite=http://localhost:8080/alfresco/aos
-        -Dmessaging.broker.url=\"failover:(nio://activemq:61616)?timeout=3000&jms.useCompression=true\"
+        -Dmessaging.broker.url="failover:(nio://activemq:61616)?timeout=3000&jms.useCompression=true"
         -Ddeployment.method=DOCKER_COMPOSE
         -Dtransform.service.enabled=true
         -Dtransform.service.url=http://transform-router:8095
@@ -36,7 +35,19 @@ services:
         -DlocalTransform.core-aio.url=http://transform-core-aio:8090/
         -Dcsrf.filter.enabled=false
         -XX:MinRAMPercentage=50 -XX:MaxRAMPercentage=80
-        "
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:8080/alfresco/api/-default-/public/alfresco/versions/1/probes/-ready-
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 1m
+    depends_on: 
+      postgres:
+        condition: service_healthy
     volumes:
       - ./config/search-tracking-context.xml://usr/local/tomcat/shared/classes/alfresco/extension/search-tracking-context.xml
 
@@ -89,7 +100,6 @@ services:
         -Dalfresco.protocol=http
         "
 
-
   postgres:
     image: postgres:${POSTGRES_TAG}
     environment:
@@ -97,8 +107,11 @@ services:
       - POSTGRES_USER=alfresco
       - POSTGRES_DB=alfresco
     command: postgres -c max_connections=300 -c log_min_messages=LOG
-    ports:
-      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   elasticsearch:
     image: opensearchproject/opensearch:${OPENSEARCH_TAG}
@@ -120,9 +133,13 @@ services:
         hard: 65536
     cap_add:
       - IPC_LOCK
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     ports:
       - 9200:9200
-      - 9300:9300
 
   kibana:
     image: opensearchproject/opensearch-dashboards:${OPENSEARCH_DASHBOARDS_TAG}
@@ -133,29 +150,13 @@ services:
     ports:
       - 5601:5601
     depends_on:
-      - elasticsearch
-
-
-  # live-indexing:
-  #   image: quay.io/alfresco/alfresco-elasticsearch-live-indexing:${LIVE_INDEXING_TAG}
-  #   depends_on:
-  #     - elasticsearch
-  #     - alfresco
-  #   environment:
-  #     SPRING_ELASTICSEARCH_REST_URIS: http://elasticsearch:9200
-  #     SPRING_ACTIVEMQ_BROKERURL: nio://activemq:61616
-  #     ALFRESCO_ACCEPTEDCONTENTMEDIATYPESCACHE_BASEURL: http://transform-core-aio:8090/transform/config
-  #     ALFRESCO_SHAREDFILESTORE_BASEURL: http://shared-file-store:8099/alfresco/api/-default-/private/sfs/versions/1/file/
-
-  # zeppelin
+      elasticsearch:
+        condition: service_healthy
 
   activemq:
     image: alfresco/alfresco-activemq:${ACTIVEMQ_TAG}
     ports:
       - "8161:8161" # Web Console
-      - "5672:5672" # AMQP
-      - "61616:61616" # OpenWire
-      - "61613:61613" # STOMP
 
   digital-workspace:
     image: quay.io/alfresco/alfresco-digital-workspace:${ADW_TAG}
@@ -165,7 +166,6 @@ services:
       APP_CONFIG_PROVIDER: "ECM"
       BASE_PATH: ./
       APP_BASE_SHARE_URL: "http://localhost:8080/workspace/#/preview/s"
-
 
   control-center:
     image: quay.io/alfresco/alfresco-control-center:${CONTROL_CENTER_TAG}
@@ -186,6 +186,21 @@ services:
           - ./config/nginx.conf:/etc/nginx/nginx.conf
       ports:
           - 8080:8080
+
+  # Alfresco OpenASS
+
+  open-ass:
+    build:
+      context: ../../open-ass
+    environment:
+      - content.service.url=http://alfresco:8080
+      - opensearch.host=elasticsearch
+      - batch.indexer.cron=0/10 * * * * ?
+    depends_on:
+      alfresco:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy          
 
 volumes:
   shared-file-store-volume:
