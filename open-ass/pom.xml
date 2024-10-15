@@ -23,6 +23,10 @@
     <opensearch.version>2.17.0</opensearch.version>
     <httpclient.version>5.3</httpclient.version>
     <jackson.version>2.16.1</jackson.version>
+    <commons-io.version>2.15.0</commons-io.version>
+    <testcontainers.version>1.20.2</testcontainers.version>
+    <alfresco-testcontainers.version>0.8.1</alfresco-testcontainers.version>
+    <opensearch-testcontainers.version>2.1.1</opensearch-testcontainers.version>
   </properties>
 
   <repositories>
@@ -52,6 +56,7 @@
       <artifactId>opensearch-rest-high-level-client</artifactId>
       <version>${opensearch.version}</version>
     </dependency>
+    <!-- Exclude commons-io 2.10.0 to mitigate a critical vulnerability -->
     <dependency>
       <groupId>org.alfresco</groupId>
       <artifactId>alfresco-acs-java-rest-api-spring-boot-starter</artifactId>
@@ -66,7 +71,7 @@
     <dependency>
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
-      <version>2.15.0</version>
+      <version>${commons-io.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.httpcomponents.client5</groupId>
@@ -87,6 +92,36 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-annotations</artifactId>
       <version>${jackson.version}</version>
+    </dependency>
+    <!-- Testing -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>RELEASE</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <version>${testcontainers.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.alfresco</groupId>
+      <artifactId>alfresco-testcontainers</artifactId>
+      <version>${alfresco-testcontainers.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.opensearch</groupId>
+      <artifactId>opensearch-testcontainers</artifactId>
+      <version>${opensearch-testcontainers.version}</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
