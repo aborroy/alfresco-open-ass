@@ -201,6 +201,7 @@ services:
     environment:
       - content.service.url=http://alfresco:8080
       - opensearch.host=opensearch
+      - batch.indexer.cron=0/10 * * * * ?
     depends_on:
       alfresco:
         condition: service_healthy
